@@ -1,0 +1,82 @@
+/* NodeScan documentation — minimal styles.
+ *
+ * The page is intentionally left mostly unstyled and relies on the browser's
+ * default rendering. The rules below cover only two things: keeping content
+ * usable on small / mobile screens, and presenting code blocks (wrapped, with
+ * lightweight syntax highlighting). Nothing else is styled. */
+
+/* --- Mobile responsiveness ------------------------------------------------ */
+
+/* Wide tables (options / API reference) scroll independently instead of
+ * overflowing the viewport and triggering page-wide zoom-out on mobile. */
+table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+/* Guard against any future embedded media overflowing small screens. */
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+/* --- Code blocks ---------------------------------------------------------- */
+
+/* Wrap long command lines instead of scrolling sideways, and give each block a
+ * light, bordered container so the highlighted code is easy to read. */
+pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    padding: 0.85rem 1rem;
+    line-height: 1.5;
+}
+
+pre code {
+    white-space: inherit;
+}
+
+code {
+    font-family:
+        ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.95em;
+}
+
+/* Subtle inline code, distinct from prose without heavy styling. */
+:not(pre) > code {
+    background: #eff1f3;
+    border-radius: 4px;
+    padding: 0.1em 0.35em;
+}
+
+/* --- Syntax highlighting tokens (light, GitHub-inspired palette) ---------- */
+
+.tok-prompt {
+    color: #6e7781;
+    user-select: none; /* so copying a command skips the "$ " prompt */
+}
+.tok-cmd {
+    color: #116329;
+}
+.tok-flag {
+    color: #953800;
+}
+.tok-comment {
+    color: #6a737d;
+    font-style: italic;
+}
+.tok-keyword {
+    color: #cf222e;
+}
+.tok-string {
+    color: #0a3069;
+}
+.tok-number {
+    color: #0550ae;
+}
+.tok-func {
+    color: #8250df;
+}

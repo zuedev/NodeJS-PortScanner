@@ -1,0 +1,46 @@
+name: Deploy docs to GitHub Pages
+
+# Publish the static documentation site in ./docs whenever it changes on the
+# default branch. Can also be triggered manually from the Actions tab.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "pages/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+# Least-privilege permissions required by the Pages deployment actions.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment; don't cancel an in-progress run so a
+# published deploy is never left half-finished.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

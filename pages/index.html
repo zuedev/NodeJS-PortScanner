@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>
+            NodeScan — Speedy port scanner with service fingerprinting
+        </title>
+        <meta
+            name="description"
+            content="NodeScan is a fast, dependency-free TCP port scanner with service fingerprinting for Node.js. Documentation, use cases, and examples."
+        />
+        <!-- Emoji favicon, no external assets required -->
+        <link
+            rel="icon"
+            href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>"
+        />
+        <link rel="stylesheet" href="styles.css" />
+    </head>
+    <body>
+        <header>
+            <h1>🔍 NodeScan</h1>
+            <p>
+                A fast, lightweight TCP port scanner with service
+                fingerprinting, built for network administrators and security
+                learners to audit
+                <strong>their own</strong> systems.
+            </p>
+            <nav aria-label="Primary">
+                <a href="#features">Features</a> ·
+                <a href="#install">Install</a> ·
+                <a href="#quick-start">Quick start</a> ·
+                <a href="#use-cases">Use cases</a> ·
+                <a href="#examples">Examples</a> · <a href="#api">API</a> ·
+                <a href="https://github.com/zuedev/NodeScan">GitHub</a>
+            </nav>
+        </header>
+
+        <main>
+            <aside>
+                <p>
+                    ⚠️
+                    <strong
+                        >Only scan systems you own or have explicit written
+                        permission to test.</strong
+                    >
+                    Unauthorized port scanning may violate the Computer Fraud
+                    and Abuse Act (US), the Computer Misuse Act (UK), and
+                    equivalent laws in your jurisdiction. The authors assume no
+                    liability for misuse.
+                </p>
+            </aside>
+
+            <section id="features">
+                <h2>Features</h2>
+                <ul>
+                    <li>
+                        <strong>Concurrent scanning</strong> — a bounded worker
+                        pool runs many connections at once with a configurable
+                        limit, so you stay fast without exhausting file
+                        descriptors.
+                    </li>
+                    <li>
+                        <strong>Flexible port specs</strong> — mix inclusive
+                        ranges and lists: <code>1-1024</code>,
+                        <code>80,443,8080</code>, or
+                        <code>22,80,8000-8010</code>.
+                    </li>
+                    <li>
+                        <strong>Service fingerprinting</strong> — banner
+                        grabbing plus a signature database identifies common
+                        services like SSH, nginx, Apache, MySQL, and Redis.
+                    </li>
+                    <li>
+                        <strong>Configurable timeouts</strong> — tune connection
+                        timeouts to suit slow, filtered, or distant hosts.
+                    </li>
+                    <li>
+                        <strong>Clean output + JSON</strong> — a neatly aligned
+                        table for humans, plus structured JSON export for
+                        scripts and pipelines.
+                    </li>
+                    <li>
+                        <strong>Featherweight</strong> — built on Node's
+                        built-in <code>net</code> module, with no heavy
+                        dependencies to install or audit.
+                    </li>
+                </ul>
+            </section>
+
+            <section id="install">
+                <h2>Installation</h2>
+                <p>Requires <strong>Node.js &ge; 25</strong>. No build step.</p>
+
+                <h3>Clone and install</h3>
+                <pre><code><span class="tok-prompt">$</span> <span class="tok-cmd">git</span> clone https://github.com/zuedev/NodeScan.git
+<span class="tok-prompt">$</span> <span class="tok-cmd">cd</span> NodeScan
+<span class="tok-prompt">$</span> <span class="tok-cmd">npm</span> install</code></pre>
+
+                <h3>Install globally (optional)</h3>
+                <p>
+                    Exposes a <code>nodescan</code> command on your
+                    <code>PATH</code>.
+                </p>
+                <pre><code><span class="tok-prompt">$</span> <span class="tok-cmd">npm</span> install <span class="tok-flag">-g</span> .
+<span class="tok-prompt">$</span> <span class="tok-cmd">nodescan</span> <span class="tok-flag">--host</span> 192.168.1.1 <span class="tok-flag">--ports</span> 1-1024</code></pre>
+            </section>
+
+            <section id="quick-start">
+                <h2>Quick start</h2>
+                <ol>
+                    <li>
+                        Scan a host you own:
+                        <pre><code><span class="tok-prompt">$</span> <span class="tok-cmd">node</span> scanner.js <span class="tok-flag">--host</span> 192.168.1.1 <span class="tok-flag">--ports</span> 1-1024</code></pre>
+                    </li>
+                    <li>
+                        Read the table — open ports are listed with their
+                        detected service.
+                    </li>
+                    <li>
+                        Save a report:
+                        <pre><code><span class="tok-prompt">$</span> <span class="tok-cmd">node</span> scanner.js <span class="tok-flag">--host</span> 192.168.1.1 <span class="tok-flag">--ports</span> 1-1024 <span class="tok-flag">--output</span> results.json</code></pre>
+                    </li>
+                </ol>
+            </section>
+
+            <section id="use-cases">
+                <h2>Use cases</h2>
+                <p>
+                    Practical, lawful ways to put NodeScan to work on
+                    infrastructure you control.
+                </p>
+
+                <h3>🖥️ Audit your own server</h3>
+                <p>
+                    Confirm exactly which ports your VPS or home server exposes
+                    to the network, and spot anything you didn't intend to leave
+                    open.
+                </p>
+                <pre><code><span class="tok-prompt">$</span> <span class="tok-cmd">node</span> scanner.js <span class="tok-flag">-h</span> my-server.lan <span class="tok-flag">-p</span> 1-65535 <span class="tok-flag">-c</span> 200</code></pre>
+
+                <h3>🏠 Inventory your home network</h3>
+                <p>
+                    Discover what services are running on devices across your
+                    LAN — printers, NAS boxes, IoT gadgets — and fingerprint
+                    them.
+                </p>
+                <pre><code><span class="tok-prompt">$</span> <span class="tok-cmd">node</span> scanner.js <span class="tok-flag">-h</span> 192.168.1.10 <span class="tok-flag">-p</span> 1-1024</code></pre>
+
+                <h3>🧱 Verify firewall rules</h3>
+                <p>
+                    After changing firewall or security-group rules, prove that
+                    the ports you closed are actually filtered and the ones you
+                    need stay reachable.
+                </p>
+                <pre><code><span class="tok-prompt">$</span> <span class="tok-cmd">node</span> scanner.js <span class="tok-flag">-h</span> 10.0.0.5 <span class="tok-flag">-p</span> 22,80,443,3306 <span class="tok-flag">-t</span> 1500</code></pre>
+
+                <h3>🚀 Pre-deployment smoke check</h3>
+                <p>
+                    Before going live, confirm a fresh box only answers on the
+                    services you expect (for example, just <code>80</code> and
+                    <code>443</code>).
+                </p>
+                <pre><code><span class="tok-prompt">$</span> <span class="tok-cmd">node</span> scanner.js <span class="tok-flag">-h</span> staging.internal <span class="tok-flag">-p</span> 1-1024 <span class="tok-flag">-o</span> pre-deploy.json</code></pre>
+
+                <h3>🤖 CI/CD service checks</h3>
+                <p>
+                    Import the API into a test to assert that a freshly started
+                    service is listening on its expected port before the
+                    pipeline continues.
+                </p>
+                <pre><code><span class="tok-prompt">$</span> <span class="tok-cmd">node</span> <span class="tok-flag">--test</span>    <span class="tok-comment"># uses scanPorts() under the hood</span></code></pre>
+
+                <h3>🎓 Learn how scanning works</h3>
+                <p>
+                    The code is small and readable — a hands-on way to
+                    understand TCP connect scans, banner grabbing, and
+                    concurrency pools.
+                </p>
+                <pre><code><span class="tok-prompt">$</span> <span class="tok-cmd">node</span> scanner.js <span class="tok-flag">-h</span> 127.0.0.1 <span class="tok-flag">-p</span> 1-1024</code></pre>
+            </section>
+
+            <section id="examples">
+                <h2>Usage &amp; examples</h2>
+                <p>
+                    Common command-line recipes. Every flag has a short alias.
+                </p>
+
+                <h3>Basic scan</h3>
+                <p>Scan the default range (<code>1-1024</code>).</p>
+                <pre><code><span class="tok-prompt">$</span> <span class="tok-cmd">node</span> scanner.js <span class="tok-flag">--host</span> 192.168.1.1 <span class="tok-flag">--ports</span> 1-1024</code></pre>
+
+                <h3>Scan specific ports</h3>
+                <p>Pass a comma-separated list.</p>
+                <pre><code><span class="tok-prompt">$</span> <span class="tok-cmd">node</span> scanner.js <span class="tok-flag">--host</span> example.com <span class="tok-flag">--ports</span> 22,80,443,8080</code></pre>
+
+                <h3>Tune concurrency and timeout</h3>
+                <p>
+                    Scan every port with 200 simultaneous connections and a 1.5s
+                    timeout.
+                </p>
+                <pre><code><span class="tok-prompt">$</span> <span class="tok-cmd">node</span> scanner.js <span class="tok-flag">--host</span> 10.0.0.5 <span class="tok-flag">--ports</span> 1-65535 <span class="tok-flag">--concurrency</span> 200 <span class="tok-flag">--timeout</span> 1500</code></pre>
+
+                <h3>Export results to JSON</h3>
+                <p>Great for diffing scans or feeding other tools.</p>
+                <pre><code><span class="tok-prompt">$</span> <span class="tok-cmd">node</span> scanner.js <span class="tok-flag">--host</span> 192.168.1.1 <span class="tok-flag">--ports</span> 1-1024 <span class="tok-flag">--output</span> results.json</code></pre>
+
+                <h3>Options</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Flag</th>
+                            <th>Alias</th>
+                            <th>Description</th>
+                            <th>Default</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>--host</code></td>
+                            <td><code>-h</code></td>
+                            <td>Target hostname or IP address (required)</td>
+                            <td>—</td>
+                        </tr>
+                        <tr>
+                            <td><code>--ports</code></td>
+                            <td><code>-p</code></td>
+                            <td>Port range or comma-separated list</td>
+                            <td><code>1-1024</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>--concurrency</code></td>
+                            <td><code>-c</code></td>
+                            <td>Max simultaneous connections</td>
+                            <td><code>100</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>--timeout</code></td>
+                            <td><code>-t</code></td>
+                            <td>Connection timeout in milliseconds</td>
+                            <td><code>2000</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>--output</code></td>
+                            <td><code>-o</code></td>
+                            <td>Export results to a JSON file</td>
+                            <td>none</td>
+                        </tr>
+                        <tr>
+                            <td><code>--help</code></td>
+                            <td>—</td>
+                            <td>Show the help menu</td>
+                            <td>—</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Example output</h3>
+                <pre><code>Scanning 192.168.1.1 (ports 1-1024)...
+
+PORT     STATE    SERVICE
+22/tcp   open     SSH (OpenSSH 8.9)
+80/tcp   open     HTTP (nginx 1.18.0)
+443/tcp  open     HTTPS
+3306/tcp open     MySQL
+
+Scan complete: 4 open ports found in 3.2s</code></pre>
+            </section>
+
+            <section id="api">
+                <h2>Programmatic API</h2>
+                <p>
+                    NodeScan ships as an ES module, so you can import its
+                    building blocks directly — ideal for tests and automation.
+                </p>
+
+                <h3>Scan ports from code</h3>
+                <pre><code><span class="tok-keyword">import</span> { <span class="tok-func">scanPorts</span> } <span class="tok-keyword">from</span> <span class="tok-string">"nodescan"</span>;
+
+<span class="tok-keyword">const</span> results = <span class="tok-keyword">await</span> <span class="tok-func">scanPorts</span>(<span class="tok-string">"127.0.0.1"</span>, [<span class="tok-number">22</span>, <span class="tok-number">80</span>, <span class="tok-number">443</span>], {
+  concurrency: <span class="tok-number">50</span>,
+  timeout: <span class="tok-number">1500</span>,
+});
+
+<span class="tok-keyword">for</span> (<span class="tok-keyword">const</span> r <span class="tok-keyword">of</span> results) {
+  <span class="tok-keyword">if</span> (r.open) console.<span class="tok-func">log</span>(<span class="tok-string">`${r.port}/tcp open — ${r.service}`</span>);
+}</code></pre>
+
+                <h3>Parse a port spec</h3>
+                <pre><code><span class="tok-keyword">import</span> { <span class="tok-func">parsePorts</span> } <span class="tok-keyword">from</span> <span class="tok-string">"nodescan"</span>;
+
+<span class="tok-func">parsePorts</span>(<span class="tok-string">"22,80,1000-1002"</span>); <span class="tok-comment">// → [22, 80, 1000, 1001, 1002]</span></code></pre>
+
+                <h3>Fingerprint a banner</h3>
+                <pre><code><span class="tok-keyword">import</span> { <span class="tok-func">fingerprint</span> } <span class="tok-keyword">from</span> <span class="tok-string">"nodescan"</span>;
+
+<span class="tok-func">fingerprint</span>(<span class="tok-number">22</span>, <span class="tok-string">"SSH-2.0-OpenSSH_8.9"</span>); <span class="tok-comment">// → "SSH (OpenSSH 8.9)"</span>
+<span class="tok-func">fingerprint</span>(<span class="tok-number">443</span>);                       <span class="tok-comment">// → "HTTPS" (well-known fallback)</span></code></pre>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Export</th>
+                            <th>What it does</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>scanPorts(host, ports, opts)</code></td>
+                            <td>
+                                Scan many ports concurrently; resolves to sorted
+                                results.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><code>scanPort(host, port, opts)</code></td>
+                            <td>Scan a single port and grab its banner.</td>
+                        </tr>
+                        <tr>
+                            <td><code>parsePorts(spec)</code></td>
+                            <td>
+                                Expand a port spec into a sorted, de-duplicated
+                                list.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><code>fingerprint(port, banner)</code></td>
+                            <td>
+                                Identify a service from its banner or well-known
+                                port.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><code>buildJsonReport(params)</code></td>
+                            <td>
+                                Produce the JSON structure used by
+                                <code>--output</code>.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><code>formatTable(results)</code></td>
+                            <td>
+                                Render the aligned, human-readable results
+                                table.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="how-it-works">
+                <h2>How it works</h2>
+                <p>
+                    NodeScan uses Node's built-in <code>net.Socket</code> to
+                    attempt TCP connections against target ports. For each open
+                    port it:
+                </p>
+                <ol>
+                    <li>
+                        Establishes a connection within the configured timeout.
+                    </li>
+                    <li>
+                        Attempts <strong>banner grabbing</strong> by reading the
+                        initial server response.
+                    </li>
+                    <li>
+                        Matches the banner against a fingerprint database to
+                        identify the service.
+                    </li>
+                </ol>
+                <p>
+                    Concurrency is managed via a bounded connection pool, so you
+                    never exceed the configured number of simultaneous
+                    connections or overwhelm the host's file-descriptor limits.
+                </p>
+            </section>
+
+            <section id="testing">
+                <h2>Testing</h2>
+                <p>
+                    Tests run against a local mock server — no external network
+                    calls.
+                </p>
+                <pre><code><span class="tok-prompt">$</span> <span class="tok-cmd">npm</span> test</code></pre>
+            </section>
+        </main>
+
+        <footer>
+            <p>🔍 NodeScan</p>
+            <p>
+                <a href="https://github.com/zuedev/NodeScan">GitHub</a> ·
+                <a href="https://github.com/zuedev/NodeScan/blob/main/README.md"
+                    >README</a
+                >
+                ·
+                <a
+                    href="https://github.com/zuedev/NodeScan/blob/main/CONTRIBUTING.md"
+                    >Contributing</a
+                >
+                ·
+                <a href="https://github.com/zuedev/NodeScan/blob/main/LICENSE"
+                    >License</a
+                >
+            </p>
+            <p>
+                Released into the public domain (Unlicense). Use responsibly and
+                only on systems you are authorized to test.
+            </p>
+        </footer>
+    </body>
+</html>
