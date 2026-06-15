@@ -17,6 +17,8 @@ import {
     formatTable,
     formatSummary,
     buildJsonReport,
+    buildHtmlReport,
+    reportFormatFor,
     helpText,
     runCli,
     DEFAULTS,
@@ -601,6 +603,74 @@ test("buildJsonReport captures udp protocol and open|filtered ports", () => {
     assert.doesNotThrow(() => JSON.stringify(report));
 });
 
+test("buildHtmlReport renders a standalone document with open ports", () => {
+    const html = buildHtmlReport({
+        host: "192.168.1.1",
+        ports: "1-1024",
+        results: SAMPLE_RESULTS,
+        elapsedMs: 3200,
+    });
+
+    assert.match(html, /^<!DOCTYPE html>/);
+    assert.match(html, /<\/html>\s*$/);
+    assert.match(html, /<title>NodeScan report — 192\.168\.1\.1<\/title>/);
+    // Open ports and their services appear; closed ports do not.
+    assert.match(html, /22\/tcp/);
+    assert.match(html, /SSH \(OpenSSH 8\.9\)/);
+    assert.match(html, /80\/tcp/);
+    assert.doesNotMatch(html, /81\/tcp/);
+    // Summary metadata is present.
+    assert.match(html, /3\.2s/);
+});
+
+test("buildHtmlReport escapes attacker-controlled banner text", () => {
+    const hostileResults = [
+        {
+            port: 1337,
+            protocol: "tcp",
+            open: true,
+            state: "open",
+            banner: '<script>alert("xss")</script>',
+            service: "<img src=x onerror=alert(1)>",
+        },
+    ];
+    const html = buildHtmlReport({
+        host: "10.0.0.1",
+        ports: "1337",
+        results: hostileResults,
+        elapsedMs: 100,
+    });
+
+    // The raw markup must never survive into the document.
+    assert.doesNotMatch(html, /<script>alert/);
+    assert.doesNotMatch(html, /<img src=x/);
+    // It is present only in escaped form.
+    assert.match(
+        html,
+        /&lt;script&gt;alert\(&quot;xss&quot;\)&lt;\/script&gt;/,
+    );
+    assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+});
+
+test("buildHtmlReport shows a friendly message when nothing is open", () => {
+    const html = buildHtmlReport({
+        host: "10.0.0.9",
+        ports: "1-10",
+        results: [{ port: 5, open: false, state: "closed", service: null }],
+        elapsedMs: 250,
+    });
+    assert.match(html, /No open ports found/);
+});
+
+test("reportFormatFor picks HTML only for .html/.htm extensions", () => {
+    assert.equal(reportFormatFor("report.html"), "html");
+    assert.equal(reportFormatFor("report.HTM"), "html");
+    assert.equal(reportFormatFor("/tmp/out.Html"), "html");
+    assert.equal(reportFormatFor("results.json"), "json");
+    assert.equal(reportFormatFor("results"), "json");
+    assert.equal(reportFormatFor("notes.html.json"), "json");
+});
+
 test("helpText documents every option", () => {
     const text = helpText();
     for (const flag of [
@@ -737,6 +807,42 @@ test("runCli writes a JSON report when --output is given", async () => {
         assert.equal(report.openCount, 1);
         assert.equal(report.open[0].port, port);
         assert.equal(report.open[0].service, "SSH (OpenSSH 8.9)");
+    } finally {
+        await closeServer(server);
+        await unlink(outFile).catch(() => {});
+    }
+});
+
+test("runCli writes an HTML report when --output ends in .html", async () => {
+    const { server, port } = await startServer((socket) => {
+        socket.write("SSH-2.0-OpenSSH_8.9p1\r\n");
+    });
+    const outFile = join(
+        tmpdir(),
+        `nodescan-test-${process.pid}-${Date.now()}.html`,
+    );
+    const { io, out } = makeIo();
+    try {
+        const code = await runCli(
+            [
+                "--host",
+                HOST,
+                "--ports",
+                String(port),
+                "--timeout",
+                "800",
+                "--output",
+                outFile,
+            ],
+            io,
+        );
+        assert.equal(code, 0);
+        assert.ok(out.join("\n").includes(`written to ${outFile}`));
+
+        const html = await readFile(outFile, "utf8");
+        assert.match(html, /^<!DOCTYPE html>/);
+        assert.match(html, new RegExp(`${port}/tcp`));
+        assert.match(html, /SSH \(OpenSSH 8\.9\)/);
     } finally {
         await closeServer(server);
         await unlink(outFile).catch(() => {});

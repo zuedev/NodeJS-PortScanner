@@ -738,6 +738,200 @@ export function buildJsonReport({
     };
 }
 
+/**
+ * HTML-escape a value for safe interpolation into report markup.
+ *
+ * Banner and service text originate from the scanned host and are therefore
+ * untrusted: a hostile target could embed `<script>` or other markup in its
+ * banner. Escaping every dynamic value prevents that data from being treated
+ * as HTML when the report is opened in a browser.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (ch) => {
+        switch (ch) {
+            case "&":
+                return "&amp;";
+            case "<":
+                return "&lt;";
+            case ">":
+                return "&gt;";
+            case '"':
+                return "&quot;";
+            default:
+                return "&#39;";
+        }
+    });
+}
+
+/** Map a port state to a CSS-class-safe slug (drops the `|` in open|filtered). */
+function stateSlug(state) {
+    if (state === "open") return "open";
+    if (state === "open|filtered") return "filtered";
+    return "closed";
+}
+
+/**
+ * Render a scan as a standalone, self-contained HTML report.
+ *
+ * Reuses {@link buildJsonReport} for the underlying data so the HTML and JSON
+ * reports always agree. Every dynamic value is passed through
+ * {@link escapeHtml} because banners are attacker-controlled and must never be
+ * rendered as markup.
+ *
+ * @param {{host: string, protocol?: ("tcp"|"udp"), ports: string,
+ *   results: ScanResult[], elapsedMs: number}} params
+ * @returns {string} a complete HTML document
+ */
+export function buildHtmlReport(params) {
+    const report = buildJsonReport(params);
+    const seconds = (report.durationMs / 1000).toFixed(1);
+
+    const renderRows = (entries) =>
+        entries
+            .map(
+                (e) => `          <tr>
+            <td class="port">${e.port}/${escapeHtml(e.protocol)}</td>
+            <td><span class="state state-${stateSlug(e.state)}">${escapeHtml(e.state)}</span></td>
+            <td>${escapeHtml(e.service ?? "unknown")}</td>
+            <td>${e.banner ? `<code>${escapeHtml(e.banner)}</code>` : '<span class="muted">—</span>'}</td>
+          </tr>`,
+            )
+            .join("\n");
+
+    const section = (title, entries) =>
+        entries.length === 0
+            ? ""
+            : `      <h2>${escapeHtml(title)} <span class="count">${entries.length}</span></h2>
+      <table>
+        <thead>
+          <tr><th>Port</th><th>State</th><th>Service</th><th>Banner</th></tr>
+        </thead>
+        <tbody>
+${renderRows(entries)}
+        </tbody>
+      </table>`;
+
+    const body =
+        report.open.length === 0 && report.openFiltered.length === 0
+            ? '      <p class="empty">No open ports found.</p>'
+            : [
+                  section("Open ports", report.open),
+                  section("Open | filtered ports", report.openFiltered),
+              ]
+                  .filter(Boolean)
+                  .join("\n");
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NodeScan report — ${escapeHtml(report.host)}</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0; padding: 2rem 1rem; line-height: 1.5;
+    color: #1f2933; background: #eef1f5;
+  }
+  main { max-width: 60rem; margin: 0 auto; }
+  header h1 { margin: 0 0 .25rem; font-size: 1.6rem; }
+  .target { margin: 0; color: #52606d; }
+  .target strong { color: #1f2933; }
+  .meta { margin: 1.5rem 0; }
+  .meta dl {
+    display: grid; gap: 1px; margin: 0;
+    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+    border: 1px solid #d2d9e0; border-radius: .5rem; overflow: hidden;
+  }
+  .meta dl > div { background: #fff; padding: .75rem 1rem; }
+  .meta dt {
+    font-size: .7rem; text-transform: uppercase; letter-spacing: .04em;
+    color: #7b8794; margin-bottom: .15rem;
+  }
+  .meta dd { margin: 0; font-size: 1.1rem; font-weight: 600; }
+  h2 { font-size: 1.15rem; margin: 1.75rem 0 .75rem; }
+  h2 .count {
+    display: inline-block; min-width: 1.5rem; padding: 0 .4rem;
+    font-size: .8rem; text-align: center; border-radius: 1rem;
+    background: #cbd2d9; color: #1f2933; vertical-align: middle;
+  }
+  table {
+    width: 100%; border-collapse: collapse; background: #fff;
+    border-radius: .5rem; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.06);
+  }
+  th, td { text-align: left; padding: .6rem .85rem; border-bottom: 1px solid #e4e7eb; vertical-align: top; }
+  th {
+    font-size: .7rem; text-transform: uppercase; letter-spacing: .04em;
+    color: #7b8794; background: #f5f7fa;
+  }
+  tr:last-child td { border-bottom: none; }
+  .port { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+  .state { display: inline-block; padding: .1rem .5rem; border-radius: 1rem; font-size: .8rem; font-weight: 600; }
+  .state-open { background: #c1f2d0; color: #0b6b2f; }
+  .state-filtered { background: #fce4b8; color: #8a5300; }
+  .state-closed { background: #e4e7eb; color: #52606d; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .85rem; word-break: break-all; }
+  .muted { color: #9aa5b1; }
+  .empty { padding: 2rem; text-align: center; color: #52606d; background: #fff; border-radius: .5rem; }
+  footer { margin-top: 2rem; font-size: .8rem; color: #7b8794; }
+  footer a { color: inherit; }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e4e7eb; background: #1f2933; }
+    .target { color: #9aa5b1; }
+    .target strong { color: #f5f7fa; }
+    .meta dl { border-color: #3e4c59; }
+    .meta dl > div { background: #2a3744; }
+    table { background: #2a3744; box-shadow: none; }
+    th { background: #323f4b; color: #9aa5b1; }
+    th, td { border-color: #3e4c59; }
+    .empty { background: #2a3744; }
+    h2 .count { background: #3e4c59; color: #e4e7eb; }
+  }
+</style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>🔍 NodeScan report</h1>
+      <p class="target"><strong>${escapeHtml(report.host)}</strong> · ${escapeHtml(report.protocol.toUpperCase())} · ports ${escapeHtml(report.ports)}</p>
+    </header>
+    <section class="meta">
+      <dl>
+        <div><dt>Scanned at</dt><dd>${escapeHtml(report.scannedAt)}</dd></div>
+        <div><dt>Duration</dt><dd>${seconds}s</dd></div>
+        <div><dt>Ports scanned</dt><dd>${report.totalScanned}</dd></div>
+        <div><dt>Open</dt><dd>${report.openCount}</dd></div>
+        <div><dt>Open | filtered</dt><dd>${report.openFilteredCount}</dd></div>
+      </dl>
+    </section>
+    <section>
+${body}
+    </section>
+    <footer>
+      <p>Generated by <a href="https://github.com/zuedev/nodescan">NodeScan</a>. Only scan systems you own or have explicit written permission to test.</p>
+    </footer>
+  </main>
+</body>
+</html>
+`;
+}
+
+/**
+ * Choose a report format from an output filename's extension. Files ending in
+ * `.html` or `.htm` produce an HTML report; everything else is JSON.
+ *
+ * @param {string} outputPath
+ * @returns {("html"|"json")}
+ */
+export function reportFormatFor(outputPath) {
+    return /\.html?$/i.test(outputPath) ? "html" : "json";
+}
+
 /** The CLI help / usage text. */
 export function helpText() {
     return `NodeScan — a fast, lightweight TCP port scanner.
@@ -753,7 +947,8 @@ Options:
   -c, --concurrency <n>      Max simultaneous connections (default: ${DEFAULTS.concurrency})
   -t, --timeout <ms>         Connection timeout in milliseconds (default: ${DEFAULTS.timeout})
   -r, --rate <n>             Max new probes started per second (default: unlimited)
-  -o, --output <file>        Export results to a JSON file
+  -o, --output <file>        Export results to a file; a .html (or .htm)
+                             extension writes an HTML report, otherwise JSON
       --help                 Show this help menu
 
 Examples:
@@ -761,6 +956,7 @@ Examples:
   node scanner.js --host example.com --ports 22,80,443,8080
   node scanner.js --host 10.0.0.5 --ports 1-65535 -c 200 -t 1500
   node scanner.js --host 192.168.1.1 --ports 1-1024 --output results.json
+  node scanner.js --host 192.168.1.1 --ports 1-1024 --output report.html
   node scanner.js --host 192.168.1.1 --protocol udp --ports 53,123,161
   node scanner.js --host 192.168.1.1 --ports 1-1024 --rate 50
 
@@ -835,19 +1031,19 @@ export async function runCli(argv, io = {}) {
     log(formatSummary(results, elapsedMs));
 
     if (options.output) {
-        const report = buildJsonReport({
+        const params = {
             host: options.host,
             protocol: options.protocol,
             ports: options.ports,
             results,
             elapsedMs,
-        });
+        };
+        const contents =
+            reportFormatFor(options.output) === "html"
+                ? buildHtmlReport(params)
+                : `${JSON.stringify(buildJsonReport(params), null, 2)}\n`;
         try {
-            await writeFile(
-                options.output,
-                `${JSON.stringify(report, null, 2)}\n`,
-                "utf8",
-            );
+            await writeFile(options.output, contents, "utf8");
             log(`\nResults written to ${options.output}`);
         } catch (err) {
             errorLog(
