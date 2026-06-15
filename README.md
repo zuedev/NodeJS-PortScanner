@@ -19,7 +19,8 @@ A fast, lightweight port scanner with service fingerprinting, built in Node.js. 
 - 🎯 **Port range support** (e.g., `1-1024`, `80,443,8080`)
 - 🔎 **Service fingerprinting** — identifies common services via banner grabbing
 - ⏱️ **Configurable timeouts** for slow or filtered hosts
-- 📊 **Clean tabular output** with optional JSON export
+- � **Rate limiting** to reduce network noise (`--rate`)
+- �📊 **Clean tabular output** with optional JSON export
 - 🪶 **Zero heavy dependencies** — uses Node's built-in `net` and `dgram` modules
 
 ---
@@ -109,6 +110,15 @@ services (DNS, NTP) to encourage a response.
 node scanner.js --host 10.0.0.5 --ports 1-65535 --concurrency 200 --timeout 1500
 ```
 
+### Limit the scan rate
+
+```bash
+node scanner.js --host 192.168.1.1 --ports 1-1024 --rate 50
+```
+
+Caps how many new probes are started each second across all workers, reducing
+network noise and load on the target. Unlimited by default.
+
 ### Export results to JSON
 
 ```bash
@@ -119,15 +129,16 @@ node scanner.js --host 192.168.1.1 --ports 1-1024 --output results.json
 
 ## ⚙️ Options
 
-| Flag            | Alias | Description                              | Default  |
-| --------------- | ----- | ---------------------------------------- | -------- |
-| `--host`        | `-h`  | Target hostname or IP address (required) | —        |
-| `--ports`       | `-p`  | Port range or comma-separated list       | `1-1024` |
-| `--protocol`    | `-P`  | Transport protocol (`tcp` or `udp`)      | `tcp`    |
-| `--concurrency` | `-c`  | Max simultaneous connections             | `100`    |
-| `--timeout`     | `-t`  | Connection timeout in milliseconds       | `2000`   |
-| `--output`      | `-o`  | Export results to a JSON file            | none     |
-| `--help`        | —     | Show help menu                           | —        |
+| Flag            | Alias | Description                              | Default   |
+| --------------- | ----- | ---------------------------------------- | --------- |
+| `--host`        | `-h`  | Target hostname or IP address (required) | —         |
+| `--ports`       | `-p`  | Port range or comma-separated list       | `1-1024`  |
+| `--protocol`    | `-P`  | Transport protocol (`tcp` or `udp`)      | `tcp`     |
+| `--concurrency` | `-c`  | Max simultaneous connections             | `100`     |
+| `--timeout`     | `-t`  | Connection timeout in milliseconds       | `2000`    |
+| `--rate`        | `-r`  | Max new probes started per second        | unlimited |
+| `--output`      | `-o`  | Export results to a JSON file            | none      |
+| `--help`        | —     | Show help menu                           | —         |
 
 ---
 
@@ -175,7 +186,7 @@ UDP scans (`--protocol udp`) use Node's `dgram` module instead. Since UDP has no
 - [x] UDP scanning support
 - [ ] Configurable fingerprint database (JSON-based)
 - [ ] CIDR range scanning (e.g., `192.168.1.0/24`)
-- [ ] Rate limiting to reduce network noise
+- [x] Rate limiting to reduce network noise
 - [ ] HTML report generation
 
 ---

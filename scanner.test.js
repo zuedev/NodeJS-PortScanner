@@ -13,6 +13,7 @@ import {
     scanPort,
     scanUdpPort,
     scanPorts,
+    createRateLimiter,
     formatTable,
     formatSummary,
     buildJsonReport,
@@ -202,6 +203,22 @@ test("parseArgs parses the protocol option and its alias", () => {
 
 test("parseArgs rejects an unknown protocol", () => {
     assert.throws(() => parseArgs(["--protocol", "icmp"]), /tcp.*udp/);
+});
+
+test("parseArgs defaults rate to 0 (unlimited)", () => {
+    assert.equal(parseArgs(["--host", "example.com"]).rate, 0);
+    assert.equal(parseArgs(["--host", "example.com"]).rate, DEFAULTS.rate);
+});
+
+test("parseArgs parses the rate option and its alias", () => {
+    assert.equal(parseArgs(["--rate", "50"]).rate, 50);
+    assert.equal(parseArgs(["-r", "25"]).rate, 25);
+    assert.equal(parseArgs(["--rate=10"]).rate, 10);
+});
+
+test("parseArgs validates the rate option", () => {
+    assert.throws(() => parseArgs(["--rate", "0"]), /positive integer/);
+    assert.throws(() => parseArgs(["--rate", "fast"]), /positive integer/);
 });
 
 // ---------------------------------------------------------------------------
@@ -420,6 +437,46 @@ test("scanPorts dispatches to UDP when protocol is udp", async () => {
     }
 });
 
+test("scanPorts throttles probe starts when a rate is set", async () => {
+    const closedPort = await getClosedPort();
+    // Repeatedly scan the same closed port so each probe returns quickly,
+    // isolating the delay introduced by the rate limiter.
+    const ports = Array.from({ length: 5 }, () => closedPort);
+    const start = Date.now();
+    await scanPorts(HOST, ports, { concurrency: 5, timeout: 500, rate: 50 });
+    const elapsed = Date.now() - start;
+    // 5 probes at 50/s ⇒ ~20ms spacing ⇒ the last starts at least ~80ms in.
+    // Assert a conservative lower bound to stay robust on slow machines.
+    assert.ok(
+        elapsed >= 60,
+        `expected >= 60ms with rate limiting, got ${elapsed}ms`,
+    );
+});
+
+// ---------------------------------------------------------------------------
+// createRateLimiter
+// ---------------------------------------------------------------------------
+
+test("createRateLimiter resolves immediately when disabled", async () => {
+    const acquire = createRateLimiter(0);
+    const start = Date.now();
+    for (let i = 0; i < 50; i++) await acquire();
+    const elapsed = Date.now() - start;
+    assert.ok(elapsed < 20, `expected no throttling, got ${elapsed}ms`);
+});
+
+test("createRateLimiter spaces acquisitions to the configured rate", async () => {
+    const acquire = createRateLimiter(100); // ~10ms between releases
+    const start = Date.now();
+    for (let i = 0; i < 4; i++) await acquire();
+    const elapsed = Date.now() - start;
+    // First release is immediate; the next three are spaced ~10ms apart.
+    assert.ok(
+        elapsed >= 25,
+        `expected >= 25ms across 4 acquires, got ${elapsed}ms`,
+    );
+});
+
 // ---------------------------------------------------------------------------
 // Formatting & reporting
 // ---------------------------------------------------------------------------
@@ -552,6 +609,7 @@ test("helpText documents every option", () => {
         "--protocol",
         "--concurrency",
         "--timeout",
+        "--rate",
         "--output",
         "--help",
     ]) {

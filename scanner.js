@@ -20,6 +20,7 @@ export const DEFAULTS = Object.freeze({
     protocol: "tcp",
     concurrency: 100,
     timeout: 2000,
+    rate: 0,
 });
 
 /** Largest banner (in bytes) we are willing to buffer per connection. */
@@ -110,6 +111,7 @@ const ALIASES = Object.freeze({
     "-p": "--ports",
     "-P": "--protocol",
     "-c": "--concurrency",
+    "-r": "--rate",
     "-t": "--timeout",
     "-o": "--output",
 });
@@ -163,8 +165,8 @@ function toProtocol(value, flag) {
  *
  * @param {string[]} argv
  * @returns {{host: string|null, ports: string, protocol: ("tcp"|"udp"),
- *   concurrency: number, timeout: number, output: string|null,
- *   help: boolean}}
+ *   concurrency: number, timeout: number, rate: number,
+ *   output: string|null, help: boolean}}
  */
 export function parseArgs(argv) {
     const options = {
@@ -173,6 +175,7 @@ export function parseArgs(argv) {
         protocol: DEFAULTS.protocol,
         concurrency: DEFAULTS.concurrency,
         timeout: DEFAULTS.timeout,
+        rate: DEFAULTS.rate,
         output: null,
         help: false,
     };
@@ -215,6 +218,9 @@ export function parseArgs(argv) {
                 break;
             case "--timeout":
                 options.timeout = toPositiveInt(nextValue(), flag);
+                break;
+            case "--rate":
+                options.rate = toPositiveInt(nextValue(), flag);
                 break;
             case "--output":
                 options.output = nextValue();
@@ -556,22 +562,54 @@ export function scanUdpPort(host, port, options = {}) {
 }
 
 /**
+ * Create a rate limiter that spaces acquisitions so no more than
+ * `ratePerSecond` of them are released each second. A rate of `0` (or any
+ * falsy value) disables limiting and resolves immediately.
+ *
+ * The returned function reserves its slot synchronously before awaiting, so it
+ * stays correct when shared across the worker pool.
+ *
+ * @param {number} ratePerSecond
+ * @returns {() => Promise<void>}
+ */
+export function createRateLimiter(ratePerSecond) {
+    if (!ratePerSecond || ratePerSecond <= 0) {
+        return () => Promise.resolve();
+    }
+    const interval = 1000 / ratePerSecond;
+    let nextSlot = 0;
+    return () => {
+        const now = Date.now();
+        const slot = Math.max(now, nextSlot);
+        nextSlot = slot + interval;
+        const delay = slot - now;
+        return delay > 0
+            ? new Promise((resolve) => setTimeout(resolve, delay))
+            : Promise.resolve();
+    };
+}
+
+/**
  * Scan many ports concurrently using a bounded worker pool so we never exceed
- * the configured number of simultaneous connections.
+ * the configured number of simultaneous connections. An optional `rate` caps
+ * how many new probes are started per second to reduce network noise.
  *
  * @param {string} host
  * @param {number[]} ports
  * @param {{protocol?: ("tcp"|"udp"), concurrency?: number, timeout?: number,
- *   grabBanner?: boolean, onResult?: (result: ScanResult) => void}} [options]
+ *   rate?: number, grabBanner?: boolean,
+ *   onResult?: (result: ScanResult) => void}} [options]
  * @returns {Promise<ScanResult[]>} results sorted ascending by port
  */
 export async function scanPorts(host, ports, options = {}) {
     const {
         concurrency = DEFAULTS.concurrency,
         protocol = DEFAULTS.protocol,
+        rate = DEFAULTS.rate,
         onResult,
     } = options;
     const scanOne = protocol === "udp" ? scanUdpPort : scanPort;
+    const acquire = createRateLimiter(rate);
     const results = [];
     let next = 0;
 
@@ -580,6 +618,7 @@ export async function scanPorts(host, ports, options = {}) {
         // between workers grabbing the same index.
         while (next < ports.length) {
             const port = ports[next++];
+            await acquire();
             const result = await scanOne(host, port, options);
             results.push(result);
             if (onResult) onResult(result);
@@ -713,6 +752,7 @@ Options:
   -P, --protocol <tcp|udp>   Transport protocol to scan (default: ${DEFAULTS.protocol})
   -c, --concurrency <n>      Max simultaneous connections (default: ${DEFAULTS.concurrency})
   -t, --timeout <ms>         Connection timeout in milliseconds (default: ${DEFAULTS.timeout})
+  -r, --rate <n>             Max new probes started per second (default: unlimited)
   -o, --output <file>        Export results to a JSON file
       --help                 Show this help menu
 
@@ -722,6 +762,7 @@ Examples:
   node scanner.js --host 10.0.0.5 --ports 1-65535 -c 200 -t 1500
   node scanner.js --host 192.168.1.1 --ports 1-1024 --output results.json
   node scanner.js --host 192.168.1.1 --protocol udp --ports 53,123,161
+  node scanner.js --host 192.168.1.1 --ports 1-1024 --rate 50
 
 UDP ports that never reply are reported as "open|filtered", because UDP cannot
 distinguish a silent-but-open service from a firewalled one.
@@ -783,6 +824,7 @@ export async function runCli(argv, io = {}) {
         protocol: options.protocol,
         concurrency: options.concurrency,
         timeout: options.timeout,
+        rate: options.rate,
     });
     const elapsedMs = Date.now() - started;
 
