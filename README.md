@@ -234,4 +234,4 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 ## 🙋 Author
 
-Built by [Your Name](https://github.com/yourusername) as part of a hands-on security learning portfolio.
+Built by [zuedev](https://github.com/zuedev) as part of a hands-on security learning portfolio.
